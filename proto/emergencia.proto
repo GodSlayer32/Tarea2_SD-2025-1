@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package emergencia;
+
+option go_package = "/emergencia";
+
+// Mensaje que representa una emergencia
+message Emergencia {
+  string name = 1;
+  int32 latitude = 2;
+  int32 longitude = 3;
+  int32 magnitude = 4;
+}
+
+// Mensaje con ID de emergencia y nombre de dron asignado
+message Asignacion {
+  string emergency_name = 1;
+  string dron_id = 2;
+}
+
+// Vacío para mensajes sin contenido
+message Vacio {}
+
+// Mensaje de estado de emergencia enviado al cliente
+message EstadoEmergencia {
+  string name = 1;
+  string status = 2;
+  string dron_id = 3;
+}
+
+// Servicio: Cliente → Asignación
+service ServicioAsignacion {
+  rpc EnviarEmergencias (stream Emergencia) returns (Vacio);
+}
+
+// Servicio: Monitoreo → Cliente
+service ServicioMonitoreo {
+  rpc RecibirActualizaciones (Vacio) returns (stream EstadoEmergencia);
+}
+
+// Servicio: Asignación → Drones
+service ServicioDrones {
+  rpc AsignarEmergencia (Asignacion) returns (Vacio);
+}
