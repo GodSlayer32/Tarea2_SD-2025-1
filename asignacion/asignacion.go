@@ -17,16 +17,18 @@ import (
     "go.mongodb.org/mongo-driver/mongo/options"
 )
 
+//Implementa el gRPC para asignar las emergencias
 type servidorAsignacion struct {
     pb.UnimplementedServicioAsignacionServer
 }
 
+//Calcula la distancia euclidiana entre los puntos
 func calcularDistancia(x1, y1, x2, y2 float64) float64 {
     dx := x2 - x1
     dy := y2 - y1
     return math.Sqrt(dx*dx + dy*dy)
 }
-
+//Busca el dron mas cercano disponible para apagar la emergencia
 func obtenerDronDisponible(lat, lon int32) (string, error) {
     ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
     defer cancel()
@@ -36,7 +38,7 @@ func obtenerDronDisponible(lat, lon int32) (string, error) {
         return "", err
     }
     defer cliente.Disconnect(ctx)
-
+    //Acceso a los drones
     coleccion := cliente.Database("emergencias").Collection("drones")
 
     cursor, err := coleccion.Find(ctx, bson.M{"status": "available"})
@@ -47,7 +49,7 @@ func obtenerDronDisponible(lat, lon int32) (string, error) {
 
     var mejorDron string
     minDist := math.MaxFloat64
-
+    //Aqui realiza la busqueda del mas cercano, calculando su distancia entre la emergencia y el dron
     for cursor.Next(ctx) {
         var dron struct {
             ID        string  `bson:"id"`
@@ -70,7 +72,7 @@ func obtenerDronDisponible(lat, lon int32) (string, error) {
         return "", fmt.Errorf("no hay drones disponibles")
     }
 
-    // Marcar el dron como ocupado
+    //Actualiza el estado del dron a "ocupado"
     _, err = coleccion.UpdateOne(ctx, bson.M{"id": mejorDron}, bson.M{
         "$set": bson.M{"status": "busy"},
     })
@@ -80,23 +82,25 @@ func obtenerDronDisponible(lat, lon int32) (string, error) {
 
     return mejorDron, nil
 }
+
+//Publica la emergencia en la cola RabbitMQ para registro
 func publicarEnRegistro(e *pb.Emergencia) {
     conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
     if err != nil {
-        log.Printf("❌ Error conectando a RabbitMQ: %v", err)
+        log.Printf("Error conectando a RabbitMQ: %v", err)
         return
     }
     defer conn.Close()
 
     ch, err := conn.Channel()
     if err != nil {
-        log.Printf("❌ Error abriendo canal RabbitMQ: %v", err)
+        log.Printf("Error abriendo canal RabbitMQ: %v", err)
         return
     }
     defer ch.Close()
 
     ch.QueueDeclare("registro", false, false, false, false, nil)
-
+    //Mensaje estructura
     msg := map[string]interface{}{
         "name":      e.Name,
         "latitude":  e.Latitude,
@@ -112,37 +116,37 @@ func publicarEnRegistro(e *pb.Emergencia) {
         Body:        body,
     })
 
-    log.Printf("📝 Publicado en registro (En curso): %s", body)
+    log.Printf("Publicado en registro (En curso): %s", body)
 }
 
-
+//Implementacion del servicio gRPC para recibir las emergencias
 func (s *servidorAsignacion) EnviarEmergencias(stream pb.ServicioAsignacion_EnviarEmergenciasServer) error {
-    fmt.Println("📨 Recibiendo emergencias del cliente...")
+    fmt.Println("Recibiendo emergencias del cliente...")
 
     for {
         emergencia, err := stream.Recv()
         if err != nil {
-            fmt.Println("✅ Fin de stream de emergencias.")
+            fmt.Println("Fin de stream de emergencias.")
             break
         }
 
-        fmt.Printf("🚨 Emergencia recibida: %s (%d,%d)\n", emergencia.Name, emergencia.Latitude, emergencia.Longitude)
+        fmt.Printf("Emergencia recibida: %s (%d,%d)\n", emergencia.Name, emergencia.Latitude, emergencia.Longitude)
 
-        // Elegir el dron más cercano
+        //Elegir el dron más cercano
         dronID, err := obtenerDronDisponible(emergencia.Latitude, emergencia.Longitude)
         if err != nil {
-            log.Printf("❌ No se pudo asignar dron: %v", err)
+            log.Printf("No se pudo asignar dron: %v", err)
             continue
         }
 
-        fmt.Printf("✅ Dron asignado: %s\n", dronID)
+        fmt.Printf("Dron asignado: %s\n", dronID)
 		publicarEnRegistro(emergencia)
 
 
-        // Enviar asignación al servicio de drones
+        //Enviar asignación al servicio de drones
         conn, err := grpc.Dial("localhost:50053", grpc.WithInsecure())
         if err != nil {
-            log.Printf("❌ No se pudo conectar al servicio de drones: %v", err)
+            log.Printf("No se pudo conectar al servicio de drones: %v", err)
             continue
         }
         defer conn.Close()
@@ -153,7 +157,7 @@ func (s *servidorAsignacion) EnviarEmergencias(stream pb.ServicioAsignacion_Envi
             DronId:        dronID,
         })
         if err != nil {
-            log.Printf("❌ Error enviando asignación a drones: %v", err)
+            log.Printf("Error enviando asignación a drones: %v", err)
         }
     }
 
@@ -163,14 +167,14 @@ func (s *servidorAsignacion) EnviarEmergencias(stream pb.ServicioAsignacion_Envi
 func main() {
     lis, err := net.Listen("tcp", ":50051")
     if err != nil {
-        log.Fatalf("❌ No se pudo iniciar servidor de asignación: %v", err)
+        log.Fatalf("No se pudo iniciar servidor de asignación: %v", err)
     }
 
     grpcServer := grpc.NewServer()
     pb.RegisterServicioAsignacionServer(grpcServer, &servidorAsignacion{})
 
-    fmt.Println("🚦 Servicio de asignación escuchando en puerto 50051")
+    fmt.Println("Servicio de asignación escuchando en puerto 50051")
     if err := grpcServer.Serve(lis); err != nil {
-        log.Fatalf("❌ Error al servir: %v", err)
+        log.Fatalf("Error al servir: %v", err)
     }
 }
