@@ -20,7 +20,7 @@ import (
 
 // Establece conexión con Rabbitmq para las colas que se utilizaran en el monitoreo y registro
 func conectarRabbitMQ() (*amqp.Connection, *amqp.Channel, error) {
-	conn, err := amqp.Dial("amqp://guest:guest@10.10.28.27:5672/")
+	conn, err := amqp.Dial("amqp://tarea:tarea123@10.10.28.27:5672/")
 	if err != nil {
 		return nil, nil, fmt.Errorf("error conectando a RabbitMQ: %v", err)
 	}

@@ -17,7 +17,7 @@ var updatesChan = make(chan *pb.EstadoEmergencia, 100)
 
 // Conexión a RabbitMQ y escucha de la cola "monitoreo"
 func iniciarRabbitMQ() {
-	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
+	conn, err := amqp.Dial("amqp://tarea:tarea123@localhost:5672/")
 	if err != nil {
 		log.Fatalf("Error conectando a RabbitMQ: %v", err)
 	}

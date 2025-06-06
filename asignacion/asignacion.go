@@ -87,7 +87,7 @@ func obtenerDronDisponible(lat, lon int32) (string, error) {
 
 // Publica la emergencia en la cola RabbitMQ para registro
 func publicarEnRegistro(e *pb.Emergencia) {
-	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
+	conn, err := amqp.Dial("amqp://tarea:tarea123@localhost:5672/")
 	if err != nil {
 		log.Printf("Error conectando a RabbitMQ: %v", err)
 		return
