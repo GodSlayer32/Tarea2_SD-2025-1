@@ -9,7 +9,7 @@ db = cliente_mongo["emergencias"]
 coleccion = db["emergencias"]
 
 # Conexión a RabbitMQ
-conexion = pika.BlockingConnection(pika.ConnectionParameters('10.10.28.27'))
+conexion = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
 canal = conexion.channel()
 canal.queue_declare(queue='registro')
 
