@@ -1,61 +1,110 @@
+package main
+
+import (
+    "encoding/json"
+    "fmt"
+    "log"
+    "net"
+
+    amqp "github.com/rabbitmq/amqp091-go"
+    "google.golang.org/grpc"
+    pb "tarea_sd/proto/gen/emergencia"
+)
+
+// Canal para compartir mensajes desde RabbitMQ al gRPC (buffer 100)
+var updatesChan = make(chan *pb.EstadoEmergencia, 100)
+
 // Conexión a RabbitMQ y escucha de la cola "monitoreo"
 func iniciarRabbitMQ() {
-	// Establece la conexión con el servidor de RabbitMQ usando las credenciales por defecto
-	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
-	if err != nil {
-		log.Fatalf("Error conectando a RabbitMQ: %v", err)
-	}
+    conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
+    if err != nil {
+        log.Fatalf("Error conectando a RabbitMQ: %v", err)
+    }
+    // Crea un canal de comunicación
+    ch, err := conn.Channel()
+    if err != nil {
+        log.Fatalf("Error creando canal: %v", err)
+    }
 
-	// Crea un canal de comunicación sobre la conexión establecida
-	ch, err := conn.Channel()
-	if err != nil {
-		log.Fatalf("Error creando canal: %v", err)
-	}
+    // Declara la cola "monitoreo" si no existe
+    _, err = ch.QueueDeclare("monitoreo", false, false, false, false, nil)
+    if err != nil {
+        log.Fatalf("Error declarando cola monitoreo: %v", err)
+    }
 
-	// Declara la cola "monitoreo". Si no existe, la crea.
-	_, err = ch.QueueDeclare("monitoreo", false, false, false, false, nil)
-	if err != nil {
-		log.Fatalf("Error declarando cola monitoreo: %v", err)
-	}
+    msgs, err := ch.Consume(
+        "monitoreo", "", true, false, false, false, nil,
+    )
+    if err != nil {
+        log.Fatalf("Error consumiendo cola: %v", err)
+    }
 
-	// Se suscribe a la cola "monitoreo" para comenzar a consumir mensajes.
-	// Los mensajes se entregan automáticamente (auto-ack: true)
-	msgs, err := ch.Consume(
-		"monitoreo", // nombre de la cola
-		"",          // consumer tag
-		true,        // auto acknowledge (reconocimiento automático)
-		false,       // no exclusivo
-		false,       // no esperar al servidor
-		false,       // sin argumentos adicionales
-		nil,
-	)
-	if err != nil {
-		log.Fatalf("Error consumiendo cola: %v", err)
-	}
+    // Procesar mensajes
+    go func() {
+        for msg := range msgs {
+            var data map[string]string
+            // Decodifica el mensaje JSON
+            if err := json.Unmarshal(msg.Body, &data); err != nil {
+                log.Printf("Error parseando JSON: %v", err)
+                continue
+            }
 
-	// Inicia para procesar los mensajes recibidos
-	go func() {
-		for msg := range msgs {
-			var data map[string]string
+            // Crea estructura de estado de emergencia
+            update := &pb.EstadoEmergencia{
+                Name:   data["name"],
+                Status: data["status"],
+                DronId: data["dron_id"],
+            }
 
-			// Intenta parsear el cuerpo del mensaje (JSON) a un mapa clave-valor
-			if err := json.Unmarshal(msg.Body, &data); err != nil {
-				log.Printf("Error parseando JSON: %v", err)
-				continue
-			}
+            log.Printf("Recibido de RabbitMQ: %v", update)
+            updatesChan <- update
+        }
+    }()
+}
 
-			// Construye la estructura EstadoEmergencia usando los datos del mensaje
-			update := &pb.EstadoEmergencia{
-				Name:   data["name"],
-				Status: data["status"],
-				DronId: data["dronid"],
-			}
+// Implementa el servicio gRPC de monitoreo
+type servidorMonitoreo struct {
+    pb.UnimplementedServicioMonitoreoServer
+}
 
-			// Muestra por consola el mensaje recibido
-			log.Printf("Recibido de RabbitMQ: %v", update)
+func (s *servidorMonitoreo) RecibirActualizaciones(_ *pb.Vacio, stream pb.ServicioMonitoreo_RecibirActualizacionesServer) error {
+    log.Println("Cliente conectado a monitoreo")
 
-			// Envía la actualización al canal para que sea recogida por el servidor gRPC
-			updatesChan <- update
-		}
-	}()
+    // Creamos canal local por cliente
+    clienteChan := make(chan *pb.EstadoEmergencia, 100)
+
+    // Iniciamos nueva goroutine que reenvía desde el canal global solo cuando el cliente está conectado
+    go func() {
+        for update := range updatesChan {
+            clienteChan <- update
+        }
+    }()
+
+    // Ahora enviamos al cliente desde clienteChan
+    for update := range clienteChan {
+        if err := stream.Send(update); err != nil {
+            log.Printf("Error enviando al cliente: %v", err)
+            break
+        }
+    }
+
+    return nil
+}
+
+
+func main() {
+    iniciarRabbitMQ()
+
+    lis, err := net.Listen("tcp", ":50052")
+    if err != nil {
+        log.Fatalf("No se pudo iniciar servidor gRPC: %v", err)
+    }
+
+    grpcServer := grpc.NewServer()
+    pb.RegisterServicioMonitoreoServer(grpcServer, &servidorMonitoreo{})
+
+    fmt.Println("Servicio de monitoreo escuchando en puerto 50052")
+    if err := grpcServer.Serve(lis); err != nil {
+        log.Fatalf("Error al servir gRPC: %v", err)
+    }
 }
