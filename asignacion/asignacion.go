@@ -35,7 +35,7 @@ func obtenerDronDisponible(lat, lon int32) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	cliente, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://10.10.28.27:27017"))
+	cliente, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://localhost:27017"))
 	if err != nil {
 		return "", err
 	}
