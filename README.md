@@ -31,12 +31,16 @@
   ```bash
   sudo systemctl start rabbitmq-server
 
-## Proceso de ejecución
+## Distribución MVs
 ### MV 1
-- go run cliente/cliente.go emergencia.json
-- go run monitoreo/monitoreo.go
+1. go run cliente/cliente.go emergencia.json
+2. go run monitoreo/monitoreo.go
 ### MV 2
-- go run asignacion/asignacion.go
-- python3 registro/registro.py
+3. go run asignacion/asignacion.go
+4. python3 registro/registro.py
 ### MV 3
-- go run drones/drones.go
+5. go run drones/drones.go
+
+## Proceso de ejecución 
+1. Primero en la MV3 ejecutar el script para poblar la bd de los drones: mongosh < database/init_drones.js 
+2. Luego según la enumeración en la distribución de Mvs, sería 3,4,5,2,1
