@@ -1,20 +1,62 @@
 [
   {
-    "name": "Incendio Forestal Sur",
-    "latitude": 50,
-    "longitude": 10,
+    "name": "Incendio en fábrica de pinturas",
+    "latitude": 35,
+    "longitude": -20,
+    "magnitude": 4
+  },
+  {
+    "name": "Fuego en pastizales del norte",
+    "latitude": 45,
+    "longitude": 40,
+    "magnitude": 3
+  },
+  {
+    "name": "Explosión en planta química",
+    "latitude": -30,
+    "longitude": 5,
     "magnitude": 5
   },
   {
-    "name": "Incendio de palets",
-    "latitude": -25,
+    "name": "Incendio en zona industrial",
+    "latitude": 0,
+    "longitude": -40,
+    "magnitude": 2
+  },
+  {
+    "name": "Emergencia forestal en reserva",
+    "latitude": 25,
+    "longitude": -25,
+    "magnitude": 5
+  },
+  {
+    "name": "Incendio estructural en colegio",
+    "latitude": -10,
+    "longitude": -10,
+    "magnitude": 2
+  },
+  {
+    "name": "Quema ilegal en vertedero",
+    "latitude": -45,
+    "longitude": 15,
+    "magnitude": 3
+  },
+  {
+    "name": "Incendio en condominio",
+    "latitude": 10,
     "longitude": 30,
     "magnitude": 1
   },
   {
-    "name": "Incendio de bus",
-    "latitude": 25,
-    "longitude": 25,
-    "magnitude": 3
+    "name": "Fuego en terminal de buses",
+    "latitude": -20,
+    "longitude": -30,
+    "magnitude": 4
+  },
+  {
+    "name": "Emergencia en aeropuerto regional",
+    "latitude": 50,
+    "longitude": 10,
+    "magnitude": 20
   }
 ]
