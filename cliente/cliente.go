@@ -1,102 +1,119 @@
 package main
 
 import (
-    "context"
-    "encoding/json"
-    "fmt"
-    "log"
-    "os"
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+	"strings"
 
-    "google.golang.org/grpc"
-    pb "tarea_sd/proto/gen/emergencia"
+	pb "tarea_sd/proto/gen/emergencia"
+
+	"google.golang.org/grpc"
 )
 
-// Define la estructura para leer JSON de emergencias
 type Emergencia struct {
-    Name      string `json:"name"`
-    Latitude  int32  `json:"latitude"`
-    Longitude int32  `json:"longitude"`
-    Magnitude int32  `json:"magnitude"`
+	Name      string `json:"name"`
+	Latitude  int32  `json:"latitude"`
+	Longitude int32  `json:"longitude"`
+	Magnitude int32  `json:"magnitude"`
 }
 
 func main() {
-    if len(os.Args) < 2 {
-        log.Fatalf("Uso: ./cliente emergencia.json")
-    }
+	if len(os.Args) < 2 {
+		log.Fatalf("Uso: ./cliente emergencia.json")
+	}
 
-    //Lee los datos del JSON de emegencia
-    data, err := os.ReadFile(os.Args[1])
-    if err != nil {
-        log.Fatalf("No se pudo leer el archivo: %v", err)
-    }
+	data, err := os.ReadFile(os.Args[1])
+	if err != nil {
+		log.Fatalf("No se pudo leer el archivo: %v", err)
+	}
 
-    var emergencias []Emergencia
-    if err := json.Unmarshal(data, &emergencias); err != nil {
-        log.Fatalf("Error al parsear JSON: %v", err)
-    }
+	var emergencias []Emergencia
+	if err := json.Unmarshal(data, &emergencias); err != nil {
+		log.Fatalf("Error al parsear JSON: %v", err)
+	}
 
-    fmt.Println("Emergencias leídas correctamente")
+	fmt.Println("Emergencias leídas correctamente")
 
-    //Aquí realiza la conexión gRPC con el servicio de Asignación desde el Cliente
-    connAsig, err := grpc.Dial("localhost:50051", grpc.WithInsecure())
-    if err != nil {
-        log.Fatalf("No se pudo conectar a asignación: %v", err)
-    }
-    defer connAsig.Close()
+	// gRPC con monitoreo
+	connMon, err := grpc.Dial("localhost:50052", grpc.WithInsecure())
+	if err != nil {
+		log.Fatalf("No se pudo conectar a monitoreo: %v", err)
+	}
+	defer connMon.Close()
+	monitoreoClient := pb.NewServicioMonitoreoClient(connMon)
 
+	// gRPC con asignación
+	connAsig, err := grpc.Dial("localhost:50051", grpc.WithInsecure())
+	if err != nil {
+		log.Fatalf("No se pudo conectar a asignación: %v", err)
+	}
+	defer connAsig.Close()
+	asignacionClient := pb.NewServicioAsignacionClient(connAsig)
 
-    // Creación del cliente gRPC para el servicio de asignación
-    asignacionClient := pb.NewServicioAsignacionClient(connAsig)
-    
-    stream, err := asignacionClient.EnviarEmergencias(context.Background())
-    if err != nil {
-        log.Fatalf("Error al abrir stream con asignación: %v", err)
-    }
+	// Conexión gRPC persistente al monitoreo (stream abierto una vez)
+	statusStream, err := monitoreoClient.RecibirActualizaciones(context.Background(), &pb.Vacio{})
+	if err != nil {
+		log.Fatalf("Error recibiendo actualizaciones: %v", err)
+	}
 
-    //Aquí realiza envío de JSON de emergencias al server
-    for _, e := range emergencias {
-        fmt.Printf("Enviando emergencia: %s\n", e.Name)
-        err := stream.Send(&pb.Emergencia{
-            Name:      e.Name,
-            Latitude:  e.Latitude,
-            Longitude: e.Longitude,
-            Magnitude: e.Magnitude,
-        })
-        if err != nil {
-            log.Fatalf("Error al enviar emergencia: %v", err)
-        }
-    }
+	// Canal para recibir estados desde goroutine
+	estadoChan := make(chan *pb.EstadoEmergencia)
 
-    _, err = stream.CloseAndRecv()
-    if err != nil {
-        log.Fatalf("Error al cerrar stream: %v", err)
-    }
+	go func() {
+		for {
+			estado, err := statusStream.Recv()
+			if err != nil {
+				log.Fatalf("Error recibiendo estado: %v", err)
+			}
+			estadoChan <- estado
+		}
+	}()
 
-    fmt.Println("Todas las emergencias han sido enviadas")
+	// Envío y espera de emergencias
+	for _, e := range emergencias {
+		fmt.Printf("\n Emergencia actual: %s magnitud %d en x = %d , y = %d\n", e.Name, e.Magnitude, e.Latitude, e.Longitude)
 
-    //Aquí realiza la conexión gRPC con el servicio de Monitoreo 
-    connMon, err := grpc.Dial("localhost:50052", grpc.WithInsecure())
-    if err != nil {
-        log.Fatalf("No se pudo conectar a monitoreo: %v", err)
-    }
-    defer connMon.Close()
+		// Envío por stream
+		stream, err := asignacionClient.EnviarEmergencias(context.Background())
+		if err != nil {
+			log.Fatalf("Error abriendo stream a asignación: %v", err)
+		}
 
-    // Creación del cliente gRPC para el servicio de monitoreo
-    monitoreoClient := pb.NewServicioMonitoreoClient(connMon)
+		err = stream.Send(&pb.Emergencia{
+			Name:      e.Name,
+			Latitude:  e.Latitude,
+			Longitude: e.Longitude,
+			Magnitude: e.Magnitude,
+		})
+		if err != nil {
+			log.Fatalf("Error enviando emergencia: %v", err)
+		}
 
-    statusStream, err := monitoreoClient.RecibirActualizaciones(context.Background(), &pb.Vacio{})
-    if err != nil {
-        log.Fatalf("Error al recibir actualizaciones: %v", err)
-    }
+		_, err = stream.CloseAndRecv()
+		if err != nil {
+			log.Fatalf("Error cerrando stream de asignación: %v", err)
+		}
 
-    fmt.Println("Escuchando actualizaciones de estado...")
+		asignado := false
+		for {
+			estado := <-estadoChan
+			if estado.Name == e.Name {
+				if !asignado && strings.Contains(estado.Status, "Dron en camino") {
+					fmt.Printf(" Se ha asignado %s a la emergencia\n", estado.DronId)
+					asignado = true
+				}
 
-    // Recibe estados continuamente y los muestra en tiempo real
-    for {
-        estado, err := statusStream.Recv()
-        if err != nil {
-            log.Fatalf("Error recibiendo estado: %v", err)
-        }
-        fmt.Printf(" %s — Estado: %s — Dron: %s\n", estado.Name, estado.Status, estado.DronId)
-    }
+				fmt.Printf(" %s — Estado: %s — Dron: %s\n", estado.Name, estado.Status, estado.DronId)
+
+				if strings.Contains(strings.ToLower(estado.Status), "extinguido") {
+					break
+				}
+			}
+		}
+	}
+
+	fmt.Println("\n Todas las emergencias han sido atendidas.")
 }
