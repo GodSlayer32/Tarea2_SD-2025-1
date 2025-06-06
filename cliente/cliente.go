@@ -38,7 +38,7 @@ func main() {
 	fmt.Println("Emergencias leídas correctamente")
 
 	// gRPC con monitoreo
-	connMon, err := grpc.Dial("localhost:50052", grpc.WithInsecure())
+	connMon, err := grpc.Dial("10.10.28.26:50052", grpc.WithInsecure())
 	if err != nil {
 		log.Fatalf("No se pudo conectar a monitoreo: %v", err)
 	}
@@ -46,7 +46,7 @@ func main() {
 	monitoreoClient := pb.NewServicioMonitoreoClient(connMon)
 
 	// gRPC con asignación
-	connAsig, err := grpc.Dial("localhost:50051", grpc.WithInsecure())
+	connAsig, err := grpc.Dial("10.10.28.27:50051", grpc.WithInsecure())
 	if err != nil {
 		log.Fatalf("No se pudo conectar a asignación: %v", err)
 	}

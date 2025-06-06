@@ -4,12 +4,12 @@ import json
 import pprint
 
 # Conexión a MongoDB
-cliente_mongo = pymongo.MongoClient("mongodb://localhost:27017/")
+cliente_mongo = pymongo.MongoClient("mongodb://10.10.28.27:27017/")
 db = cliente_mongo["emergencias"]
 coleccion = db["emergencias"]
 
 # Conexión a RabbitMQ
-conexion = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+conexion = pika.BlockingConnection(pika.ConnectionParameters('10.10.28.27'))
 canal = conexion.channel()
 canal.queue_declare(queue='registro')
 

@@ -20,7 +20,7 @@ import (
 
 // Establece conexión con Rabbitmq para las colas que se utilizaran en el monitoreo y registro
 func conectarRabbitMQ() (*amqp.Connection, *amqp.Channel, error) {
-	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
+	conn, err := amqp.Dial("amqp://guest:guest@10.10.28.27:5672/")
 	if err != nil {
 		return nil, nil, fmt.Errorf("error conectando a RabbitMQ: %v", err)
 	}
@@ -68,7 +68,7 @@ func actualizarPosicionEnMongo(dronID string, lat, lon int32) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	cliente, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://localhost:27017"))
+	cliente, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://10.10.28.27:27017"))
 	if err != nil {
 		log.Printf("Error conectando a MongoDB: %v", err)
 		return
@@ -106,7 +106,7 @@ func (s *servidorDrones) AsignarEmergencia(ctx context.Context, asig *pb.Asignac
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	clienteMongo, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://localhost:27017"))
+	clienteMongo, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://10.10.28.27:27017"))
 	if err != nil {
 		log.Printf("Error conectando a MongoDB: %v", err)
 		return &pb.Vacio{}, nil
