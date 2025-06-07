@@ -1,5 +1,6 @@
 use emergencias;
 
+db.emergencias.deleteMany({});
 db.drones.deleteMany({});  // Eliminar drones anteriores
 
 db.drones.insertMany([
