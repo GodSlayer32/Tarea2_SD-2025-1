@@ -24,4 +24,4 @@ db.drones.insertMany([
   }
 ]);
 
-print("✅ Drones insertados exitosamente");
+print("Drones insertados exitosamente");
