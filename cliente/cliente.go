@@ -104,18 +104,21 @@ func main() {
 		}
 
 		// Mostrar estados hasta extinción
-		asignado := false
+		primera := true
 		for estado := range estadoChan {
 			if estado.Name != e.Name {
 				continue
 			}
-			if !asignado && strings.Contains(estado.Status, "Dron en camino") {
+			// Mostrar mensaje de asignación solo la primera vez
+			if primera {
 				fmt.Printf("Se ha asignado %s a la emergencia\n", estado.DronId)
-				asignado = true
+				primera = false
 			}
 
 			fmt.Printf("%s — Estado: %s — Dron: %s\n", estado.Name, estado.Status, estado.DronId)
-			if strings.Contains(strings.ToLower(estado.Status), "extinguido") {
+
+			// Romper tras mensaje final de extinción
+			if strings.Contains(strings.ToLower(estado.Status), "ha sido extinguido") {
 				break
 			}
 		}
