@@ -21,6 +21,12 @@ var (
 )
 
 // Conexión a RabbitMQ y broadcast de mensajes a todos los suscriptores
+type mensaje struct {
+	Name   string
+	Status string
+	DronId string
+}
+
 func iniciarRabbitMQ() {
 	conn, err := amqp.Dial("amqp://tarea:tarea123@10.10.28.27:5672/")
 	if err != nil {
@@ -50,8 +56,9 @@ func iniciarRabbitMQ() {
 				continue
 			}
 			update := &pb.EstadoEmergencia{Name: data["name"], Status: data["status"], DronId: data["dron_id"]}
-			
-			// Broadcast
+
+			log.Printf("Recibido de RabbitMQ: %v", update)
+
 			subsMu.Lock()
 			for id, sub := range subscribers {
 				if err := sub.Send(update); err != nil {
@@ -71,22 +78,23 @@ type servidorMonitoreo struct{
 
 // RecibirActualizaciones registra un nuevo suscriptor y espera hasta que se desconecte
 func (s *servidorMonitoreo) RecibirActualizaciones(_ *pb.Vacio, stream pb.ServicioMonitoreo_RecibirActualizacionesServer) error {
+	// Asignar ID y registrar
 	subsMu.Lock()
 	id := nextSubID
 	nextSubID++
 	subscribers[id] = stream
 	subsMu.Unlock()
 
-	log.Printf("Suscriptor %d conectado a monitoreo", id)
+	log.Println("Cliente conectado a monitoreo")
 
-	// Esperar hasta que el cliente cierre
+	// Esperar hasta que el cliente cierre la conexión
 	<-stream.Context().Done()
 
-	// Remover suscriptor
+	// Remover suscriptor al desconectarse
 	subsMu.Lock()
 	delete(subscribers, id)
 	subsMu.Unlock()
-	log.Printf("Suscriptor %d desconectado de monitoreo", id)
+	log.Println("Cliente desconectado de monitoreo")
 
 	return nil
 }
