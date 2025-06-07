@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"sync"
 
 	pb "tarea_sd/proto/gen/emergencia"
 
@@ -12,82 +13,80 @@ import (
 	"google.golang.org/grpc"
 )
 
-// Canal para compartir mensajes desde RabbitMQ al gRPC (buffer 100)
-var updatesChan = make(chan *pb.EstadoEmergencia, 100)
+// Gestiona suscriptores para broadcasting de actualizaciones
+var (
+	subsMu      sync.Mutex
+	subscribers = make(map[int]pb.ServicioMonitoreo_RecibirActualizacionesServer)
+	nextSubID   = 0
+)
 
-// Conexión a RabbitMQ y escucha de la cola "monitoreo"
+// Conexión a RabbitMQ y broadcast de mensajes a todos los suscriptores
 func iniciarRabbitMQ() {
 	conn, err := amqp.Dial("amqp://tarea:tarea123@10.10.28.27:5672/")
 	if err != nil {
 		log.Fatalf("Error conectando a RabbitMQ: %v", err)
 	}
-	// Crea un canal de comunicación
 	ch, err := conn.Channel()
 	if err != nil {
-		log.Fatalf("Error creando canal: %v", err)
+		log.Fatalf("Error creando canal RabbitMQ: %v", err)
 	}
 
-	// Declara la cola "monitoreo" si no existe
-	_, err = ch.QueueDeclare("monitoreo", false, false, false, false, nil)
-	if err != nil {
+	// Asegurar existencia de cola
+	if _, err := ch.QueueDeclare("monitoreo", false, false, false, false, nil); err != nil {
 		log.Fatalf("Error declarando cola monitoreo: %v", err)
 	}
 
-	msgs, err := ch.Consume(
-		"monitoreo", "", true, false, false, false, nil,
-	)
+	msgs, err := ch.Consume("monitoreo", "", true, false, false, false, nil)
 	if err != nil {
 		log.Fatalf("Error consumiendo cola: %v", err)
 	}
 
-	// Procesar mensajes
+	// Leer mensajes y emitir a suscriptores
 	go func() {
 		for msg := range msgs {
 			var data map[string]string
-			// Decodifica el mensaje JSON
 			if err := json.Unmarshal(msg.Body, &data); err != nil {
 				log.Printf("Error parseando JSON: %v", err)
 				continue
 			}
-
-			// Crea estructura de estado de emergencia
-			update := &pb.EstadoEmergencia{
-				Name:   data["name"],
-				Status: data["status"],
-				DronId: data["dron_id"],
+			update := &pb.EstadoEmergencia{Name: data["name"], Status: data["status"], DronId: data["dron_id"]}
+			
+			// Broadcast
+			subsMu.Lock()
+			for id, sub := range subscribers {
+				if err := sub.Send(update); err != nil {
+					log.Printf("Error enviando a suscriptor %d: %v", id, err)
+					delete(subscribers, id)
+				}
 			}
-
-			log.Printf("Recibido de RabbitMQ: %v", update)
-			updatesChan <- update
+			subsMu.Unlock()
 		}
 	}()
 }
 
 // Implementa el servicio gRPC de monitoreo
-type servidorMonitoreo struct {
+type servidorMonitoreo struct{
 	pb.UnimplementedServicioMonitoreoServer
 }
 
+// RecibirActualizaciones registra un nuevo suscriptor y espera hasta que se desconecte
 func (s *servidorMonitoreo) RecibirActualizaciones(_ *pb.Vacio, stream pb.ServicioMonitoreo_RecibirActualizacionesServer) error {
-	log.Println("Cliente conectado a monitoreo")
+	subsMu.Lock()
+	id := nextSubID
+	nextSubID++
+	subscribers[id] = stream
+	subsMu.Unlock()
 
-	// Creamos canal local por cliente
-	clienteChan := make(chan *pb.EstadoEmergencia, 100)
+	log.Printf("Suscriptor %d conectado a monitoreo", id)
 
-	// Iniciamos nueva goroutine que reenvía desde el canal global solo cuando el cliente está conectado
-	go func() {
-		for update := range updatesChan {
-			clienteChan <- update
-		}
-	}()
+	// Esperar hasta que el cliente cierre
+	<-stream.Context().Done()
 
-	// Ahora enviamos al cliente desde clienteChan
-	for update := range clienteChan {
-		if err := stream.Send(update); err != nil {
-			log.Printf("Error enviando al cliente: %v", err)
-			break
-		}
-	}
+	// Remover suscriptor
+	subsMu.Lock()
+	delete(subscribers, id)
+	subsMu.Unlock()
+	log.Printf("Suscriptor %d desconectado de monitoreo", id)
 
 	return nil
 }
