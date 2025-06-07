@@ -20,7 +20,7 @@
 | Monitoreo  | Go       | `monitoreo/monitoreo.go`   | MV1 (10.10.28.26) |
 | Asignación | Go       | `asignacion/asignacion.go` | MV2 (10.10.28.27) |
 | Registro   | Python   | `registro/registro.py`     | MV2 (10.10.28.27) |
-| MongoDB    | -        | `init_drones.js`           | MV2 (10.10.28.27) |
+| MongoDB    | -        | `database/init_drones.js`  | MV2 (10.10.28.27) |
 | Drones     | Go       | `drones/drones.go`         | MV3 (10.10.28.28) |
 
 ---
@@ -70,7 +70,7 @@ En la terminal de **MV2**:
 3. Poblar la colección de drones en MongoDB:
 
    ```bash
-   mongosh < init_drones.js
+   mongosh < database/init_drones.js
    ```
 
 #### 3. Levantar servicios en orden
